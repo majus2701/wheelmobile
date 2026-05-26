@@ -3004,7 +3004,7 @@ const ctx = canvas.getContext('2d');
 const resultText = document.getElementById('result-text');
 
 function fitResultText() {
-  const el = resultText; // SVG <text> element
+  const el = resultText;
   const svg = document.getElementById('result-text-svg');
   if (!el || !svg) return;
 
@@ -3017,29 +3017,42 @@ function fitResultText() {
     return;
   }
 
-  // Reset attributes
+  // Reset first
   el.setAttribute('font-size', '38');
   el.setAttribute('letter-spacing', '3');
   el.removeAttribute('textLength');
   el.removeAttribute('lengthAdjust');
 
-  // Get available width from SVG container
-  const maxW = svg.getBoundingClientRect().width - 36;
-  if (maxW <= 0) return;
+  function doFit() {
+    // Get container width — try multiple methods for mobile reliability
+    let maxW = svg.getBoundingClientRect().width;
+    if (!maxW || maxW <= 0) maxW = svg.clientWidth;
+    if (!maxW || maxW <= 0) maxW = window.innerWidth - 40;
+    maxW -= 36; // padding
+    if (maxW <= 0) return;
 
-  // Measure natural text width via getComputedTextLength()
-  // This is SVG-native and always accurate
-  const naturalW = el.getComputedTextLength();
+    // Get text width — try getComputedTextLength first, fall back to canvas
+    let naturalW = el.getComputedTextLength();
+    if (!naturalW || naturalW <= 0) {
+      // Canvas fallback
+      const canvas = fitResultText._canvas || (fitResultText._canvas = document.createElement('canvas'));
+      const ctx = canvas.getContext('2d');
+      ctx.font = "900 38px 'Nunito', sans-serif";
+      naturalW = 0;
+      for (const ch of text) naturalW += ctx.measureText(ch).width;
+      naturalW += 3 * Math.max(0, text.length - 1);
+    }
 
-  if (naturalW <= maxW) {
-    // Fits fine — no adjustment needed
-    return;
+    if (naturalW <= maxW) return; // fits fine
+
+    // Force fit with textLength
+    el.setAttribute('textLength', maxW.toFixed(1));
+    el.setAttribute('lengthAdjust', 'spacingAndGlyphs');
   }
 
-  // Text is too wide — use textLength to compress it
-  // SVG textLength is guaranteed to fit text exactly within the given width
-  el.setAttribute('textLength', maxW.toFixed(1));
-  el.setAttribute('lengthAdjust', 'spacingAndGlyphs');
+  // Run immediately, then again after render to catch mobile timing issues
+  doFit();
+  requestAnimationFrame(() => doFit());
 }
 
 let currentRotation = 0; // absolute rotation offset applied to wheel
